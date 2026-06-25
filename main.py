@@ -67,10 +67,6 @@ async def run_all_cases(
         agent_cases: List of agent counts to simulate.
     """
     reader = TicketReader(input_csv)
-    tickets = reader.load()
-    logger.info(
-        "Loaded %d tickets from %s", reader.ticket_count, input_csv
-    )
 
     for num_agents in agent_cases:
         output_file = OUTPUT_DIR / f"result_agents_{num_agents}.csv"
@@ -80,8 +76,12 @@ async def run_all_cases(
             num_agents,
         )
 
+        # A fresh stream per case: the CSV is re-read lazily so only a
+        # bounded number of tickets ever live in memory, no matter how
+        # large the file is. Re-reading is negligible next to the 2–3s
+        # simulated work per ticket.
         simulation = Simulation(
-            tickets=tickets,
+            tickets=reader.stream(),
             num_agents=num_agents,
             output_path=output_file,
         )

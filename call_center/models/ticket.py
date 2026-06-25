@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -29,25 +29,7 @@ class Ticket:
     fecha_asignacion: datetime | None = field(default=None)
     fecha_resolucion: datetime | None = field(default=None)
 
-    def as_unassigned(self) -> Ticket:
-        """Return a copy with all simulation state cleared.
-
-        Used before enqueuing a ticket so each simulation run
-        starts from a clean slate without mutating the original.
-        """
-        return replace(self, agente=None, fecha_asignacion=None, fecha_resolucion=None)
-
     @property
     def is_resolved(self) -> bool:
         """Whether this ticket has been resolved by an agent."""
         return self.fecha_resolucion is not None
-
-    def __lt__(self, other: Ticket) -> bool:
-        """Enable priority queue ordering.
-
-        Lower priority number = more urgent = processed first.
-        Ties are broken by creation date (earlier first).
-        """
-        if self.prioridad != other.prioridad:
-            return self.prioridad < other.prioridad
-        return self.fecha_creacion < other.fecha_creacion

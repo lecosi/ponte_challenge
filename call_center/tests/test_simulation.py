@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +19,11 @@ def make_tickets(n: int) -> list[Ticket]:
         Ticket(id=i, fecha_creacion=FECHA, prioridad=(i % 5) + 1)
         for i in range(1, n + 1)
     ]
+
+
+def stream_tickets(n: int) -> Iterator[Ticket]:
+    for i in range(1, n + 1):
+        yield Ticket(id=i, fecha_creacion=FECHA, prioridad=(i % 5) + 1)
 
 
 @pytest.mark.asyncio
@@ -37,7 +43,7 @@ async def test_output_csv_row_count(tmp_path):
         await Simulation(tickets=tickets, num_agents=3, output_path=output).run()
     with open(output, newline="") as f:
         rows = list(csv.reader(f))
-    assert len(rows) == 6  # 1 encabezado + 5 tickets
+    assert len(rows) == 6  # 1 header row + 5 tickets
 
 
 @pytest.mark.asyncio
@@ -61,6 +67,21 @@ async def test_multiple_cases_from_same_ticket_list(tmp_path):
             await sim.run()
         assert sim.tickets_resolved == 4
         assert output.exists()
+
+
+@pytest.mark.asyncio
+async def test_consumes_a_lazy_stream(tmp_path):
+    # Production feeds a generator (TicketReader.stream), not a list.
+    output = tmp_path / "r.csv"
+    with patch("call_center.models.agent.asyncio.sleep"):
+        sim = Simulation(
+            tickets=stream_tickets(6), num_agents=3, output_path=output
+        )
+        await sim.run()
+    assert sim.tickets_resolved == 6
+    with open(output, newline="") as f:
+        rows = list(csv.reader(f))
+    assert len(rows) == 7  # 1 header row + 6 tickets
 
 
 @pytest.mark.asyncio

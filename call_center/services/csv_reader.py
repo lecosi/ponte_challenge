@@ -4,6 +4,7 @@ import csv
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 from call_center.models.ticket import Ticket
 
@@ -16,19 +17,23 @@ class _InvalidRow(Exception):
 
 
 class TicketReader:
-    """Reads and parses tickets from a CSV file.
+    """Streams and validates tickets from a CSV file.
 
-    Uses csv.reader (not DictReader) with positional column
-    constants to minimize per-row overhead when processing
-    large datasets.
+    Reads the file lazily, one row at a time, yielding valid tickets
+    as they are parsed. Nothing is held in memory beyond the current
+    row, so a file with millions of records has the same footprint
+    as one with a handful.
+
+    Tickets are emitted in file order — the simulation does not depend
+    on priority order (see README), so no sorting is performed.
 
     Expected CSV columns (positional): id, fecha_creacion, prioridad
 
-    Invalid rows are logged and skipped; they never stop the load.
+    Invalid rows are logged and skipped; they never stop the stream.
 
     Attributes:
         filepath: Path to the source CSV file.
-        skipped_rows: Number of rows skipped due to validation errors.
+        skipped_rows: Number of rows skipped in the last stream() pass.
     """
 
     COL_ID = 0
@@ -41,18 +46,17 @@ class TicketReader:
 
     def __init__(self, filepath: str | Path) -> None:
         self.filepath = Path(filepath)
-        self._tickets: list[Ticket] = []
         self.skipped_rows: int = 0
 
-    def load(self) -> list[Ticket]:
-        """Read, parse and sort tickets from the CSV.
+    def stream(self) -> Iterator[Ticket]:
+        """Yield valid tickets from the CSV, one at a time.
 
-        Invalid rows are logged as warnings and skipped so that
-        a single bad line never aborts the entire load.
+        Existence is checked eagerly so a missing file fails fast,
+        before any iteration begins. Invalid rows are logged as
+        warnings and skipped so a single bad line never aborts the read.
 
         Returns:
-            List of Ticket objects sorted by priority (ascending),
-            then by creation date (ascending) for equal priorities.
+            An iterator over valid Ticket objects, in file order.
 
         Raises:
             FileNotFoundError: If the CSV file doesn't exist.
@@ -61,18 +65,19 @@ class TicketReader:
             raise FileNotFoundError(
                 f"Tickets file not found: {self.filepath}"
             )
+        return self._stream()
 
-        self._tickets = []
+    def _stream(self) -> Iterator[Ticket]:
         self.skipped_rows = 0
 
         with open(self.filepath, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
-            next(reader)  # skip header row
+            next(reader, None)  # skip header row
 
             for row_num, row in enumerate(reader, start=2):
                 ticket = self._parse_row(row, row_num)
                 if ticket is not None:
-                    self._tickets.append(ticket)
+                    yield ticket
 
         if self.skipped_rows:
             logger.warning(
@@ -80,10 +85,6 @@ class TicketReader:
                 self.skipped_rows,
                 self.filepath.name,
             )
-            
-        self._tickets.sort()
-
-        return self._tickets
 
     def _parse_row(self, row: list[str], row_num: int) -> Ticket | None:
         """Parse and validate a single CSV row into a Ticket object.
@@ -150,8 +151,3 @@ class TicketReader:
             fecha_creacion=fecha_creacion,
             prioridad=prioridad,
         )
-
-    @property
-    def ticket_count(self) -> int:
-        """Number of tickets successfully loaded."""
-        return len(self._tickets)

@@ -3,10 +3,12 @@
 Orchestrates the ticket processing pipeline using an async
 producer-consumer pattern:
 
-    [Sorted Tickets] → [Queue (FIFO)] → [N Agents] → [CSV Writer]
+    [Ticket stream] → [Queue (FIFO)] → [N Agents] → [CSV Writer]
 
 The queue has a bounded size (backpressure) so that with millions
 of tickets, only a controlled number sit in memory at any time.
+Fed by a lazy ticket stream, end-to-end memory stays constant
+regardless of input size.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Iterable
 
 from call_center.models.agent import Agent
 from call_center.models.ticket import Ticket
@@ -45,25 +48,22 @@ class Simulation:
 
     def __init__(
         self,
-        tickets: list[Ticket],
+        tickets: Iterable[Ticket],
         num_agents: int,
         output_path: Path,
     ) -> None:
         """Initialize the simulation.
 
         Args:
-            tickets: Pre-sorted list of Ticket objects to process.
+            tickets: Iterable of Ticket objects to process. May be a
+                lazy stream (generator) so only a bounded number of
+                tickets ever live in memory at once.
             num_agents: Number of concurrent agents to spawn.
             output_path: Path for the results CSV file.
         """
-        # Keep a reference to the sorted originals; unassigned copies are
-        # made lazily in _producer so only ~QUEUE_MAX_SIZE copies are
-        # live at any moment — critical when processing millions of tickets.
         self._source_tickets = tickets
         self.num_agents = num_agents
         self._output_path = output_path
-        # Regular Queue is sufficient because tickets are fed
-        # in pre-sorted order. FIFO preserves the priority sequence.
         self._queue: asyncio.Queue[Ticket | None] = asyncio.Queue(
             maxsize=QUEUE_MAX_SIZE
         )
@@ -71,17 +71,17 @@ class Simulation:
         self.tickets_resolved = 0
 
     async def _producer(self) -> None:
-        """Feed sorted tickets into the queue.
+        """Feed tickets into the queue as they arrive from the source.
 
-        Copies each ticket just before enqueuing so originals stay
-        clean for subsequent simulation runs. With a bounded queue,
-        at most QUEUE_MAX_SIZE copies exist in memory at any time.
+        Pulls from a (possibly lazy) ticket stream and enqueues each
+        ticket. With a bounded queue, at most QUEUE_MAX_SIZE tickets
+        sit in memory at any time.
 
         If the queue is full, this coroutine awaits until an agent
         consumes a ticket, providing natural backpressure.
         """
         for ticket in self._source_tickets:
-            await self._queue.put(ticket.as_unassigned())
+            await self._queue.put(ticket)
 
         # Put (None) for each agent to signal end of work
         for _ in self._agents:
@@ -135,9 +135,7 @@ class Simulation:
         """
         start_time = datetime.now()
         logger.info(
-            "Starting simulation: %d tickets, %d agents",
-            len(self._source_tickets),
-            self.num_agents,
+            "Starting simulation with %d agents", self.num_agents
         )
 
         async with ResultWriter(self._output_path) as writer:
