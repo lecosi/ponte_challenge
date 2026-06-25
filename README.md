@@ -66,6 +66,9 @@ La validación en `TicketReader` usa `_InvalidRow` cuando la fila es inválida. 
 
 Los tickets se ordenan una sola vez antes de entrar a la cola (prioridad ascendente, luego fecha de creación). Como la cola es FIFO y los tickets ya llegan ordenados, se preserva la secuencia correcta sin necesidad de una `PriorityQueue` dentro de la simulación.
 
+### Timestamps con fecha completa
+
+En la prueba, en el ejemplo de los archivos de respuesta se ve la `fecha_asignacion` y `fecha_resolucion` solo como hora (`08:00:02`). En este caso uso el datetime completo (`2026-06-23 10:00:02`) porque una simulación puede arrancar cerca de la medianoche y cruzarla — perder la fecha haría los datos ambiguos. El formato es `%Y-%m-%d %H:%M:%S`.
 ---
 
 ## Estructura del proyecto
@@ -73,16 +76,20 @@ Los tickets se ordenan una sola vez antes de entrar a la cola (prioridad ascende
 ```
 ponte_challenge/
 ├── call_center/
+│   ├── __init__.py
 │   ├── files/
 │   │   └── tickets_dataset.csv
 │   ├── models/
+│   │   ├── __init__.py
 │   │   ├── agent.py
 │   │   └── ticket.py
 │   ├── services/
+│   │   ├── __init__.py
 │   │   ├── csv_reader.py
 │   │   ├── csv_writer.py
 │   │   └── simulation_process.py
 │   └── tests/
+│       ├── __init__.py
 │       ├── test_agent.py
 │       ├── test_csv_reader.py
 │       ├── test_csv_writer.py
@@ -90,7 +97,7 @@ ponte_challenge/
 │       └── test_ticket.py
 ├── main.py
 ├── pytest.ini
-├── requirements.txt
+├── test_requirements.txt
 └── README.md
 ```
 
