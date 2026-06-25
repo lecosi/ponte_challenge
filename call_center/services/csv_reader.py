@@ -140,10 +140,10 @@ class TicketReader:
         try:
             prioridad = int(raw_prioridad)
         except ValueError:
-            raise _InvalidRow(f"invalid priority {raw_prioridad!r} (must be an integer)")
+            raise _InvalidRow(f"invalid prioridad {raw_prioridad!r} (must be an integer)")
 
         if prioridad not in self.VALID_PRIORITY_RANGE:
-            raise _InvalidRow(f"priority {prioridad} is out of range (expected 1–5)")
+            raise _InvalidRow(f"prioridad {prioridad} is out of range (expected 1–5)")
 
         return Ticket(
             id=ticket_id,

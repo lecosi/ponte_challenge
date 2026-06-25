@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from call_center.services.csv_reader import TicketReader
+from call_center.services.simulation_process import Simulation
 
 
 logger = logging.getLogger(__name__)
@@ -66,17 +67,28 @@ async def run_all_cases(
         agent_cases: List of agent counts to simulate.
     """
     reader = TicketReader(input_csv)
+    tickets = reader.load()
     logger.info(
         "Loaded %d tickets from %s", reader.ticket_count, input_csv
     )
 
     for num_agents in agent_cases:
+        output_file = OUTPUT_DIR / f"result_agents_{num_agents}.csv"
+
         logger.info(
             "=" * 50 + "\n  CASE: %d agents\n" + "=" * 50,
             num_agents,
         )
-        
-        # aqui va la llamada a la función que ejecuta el proceso simulado
+
+        simulation = Simulation(
+            tickets=tickets,
+            num_agents=num_agents,
+            output_path=output_file,
+        )
+        await simulation.run()
+
+    logger.info("All cases completed. Results in: %s/", OUTPUT_DIR)
+
 
 def main() -> None:
     """Application entry point."""
